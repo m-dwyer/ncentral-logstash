@@ -1,0 +1,38 @@
+input {
+	tcp {
+		host => "0.0.0.0"
+		port => 5515
+		codec => json {
+			charset => 'UTF-8'
+		}
+	}
+}
+
+filter {
+	if "" in [estype] {
+		mutate {
+			replace => {
+				type => "%{estype}"
+			}
+			remove_field => [ "estype" ]
+			add_tag => [ "agentdata" ]
+		}
+		
+		date {
+			match => [ "filetime", "HH:mm:ss dd/MM/YYYY" ]
+		}
+		
+		mutate {
+			remove_field => [ "filetime" ]
+		}
+	}
+}
+
+output {
+	if "agentdata" in [tags] {
+		elasticsearch {
+			hosts => ["localhost:9200"]
+			index => "agentdata-%{+YYYY.MM.dd}"
+		}
+	}
+}
