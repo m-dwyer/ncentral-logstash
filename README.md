@@ -15,7 +15,7 @@ After deploying NcentralUtil.psm1 to agent devices, after importing this module 
 
 Either HTTPS (WebDAV) or FTP (with SSL - no certificate check!) can be used in the URI.
 
-On a centralised server, periodically call the CSVtoLogstash.ps1 script from Task Scheduler or elsewhere, passing in the directory you wish to monitor, Report Manager SQL Server credentials and Logstash Server/Port.
+On a centralised server, periodically call the FiletoLogstash.ps1 script from Task Scheduler or elsewhere, passing in the directory you wish to monitor, Report Manager SQL Server credentials and Logstash Server/Port.
 
 The script expects CSV or XML files of the format 1234567_MyOutput.(xml|csv), where 1234567 is the N-central ApplianceID, and MyOutput is an identifier for a script executed on the source agent (OutputName parameter of the Upload-Object cmdlet).  ApplianceIDs will be resolved to the Customer Name and Appliance Name.  The file will be converted to JSON and pushed to Logstash.  CustomerName, ApplianceName, estype and filetime fields are added.  estype is derived from the MyOutput string in each filename, and used for setting the type when indexing into ElasticSearch.  filetime is used as an alternate timestamp, taken from the file last write time.
 
