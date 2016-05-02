@@ -1,4 +1,4 @@
-﻿function Get-AgentPropertyValue
+function Get-AgentPropertyValue
 {
     [CmdletBinding()]
     param([switch] $Force = $false, [string] $PropertyName, [string] $PropertyXPath)
@@ -29,7 +29,7 @@
             }
             catch 
             {
-                Write-Verbose "An error occurred reading ApplianceConfig.xml: $($_.Exception.Message)"
+                Write-Verbose $_.Exception.Message
             }
             finally
             {
@@ -38,14 +38,14 @@
 
             Set-ItemProperty "HKLM:\SOFTWARE\N-able Technologies" -Name "$PropertyName" -Value $propertyValue
         }
+
+        return $propertyValue
     }
     catch
     {
         $computerSystem = Get-WmiObject -Class Win32_ComputerSystem
-        $propertyValue = "$($computerSystem.Name)-$($computerSystem.Domain)"
+        return "$($computerSystem.Name)-$($computerSystem.Domain)"
     }
-
-    return $propertyValue
 }
 
 Function Get-ApplianceID
@@ -168,13 +168,16 @@ Function Upload-Object
     ]
     [PSObject[]]$InputObject,
     [string] $OutputName,
+    [ValidateSet("CSV", "XML")]
+    [string] $OutputType = "CSV",
+    [int] $Depth = 2,
     [Parameter(Mandatory=$true)]
     $URI
     )
         begin
         {
             $objects = @()
-            $csvTempFileName = [System.IO.Path]::GetTempFileName()
+            $tempFileName = [System.IO.Path]::GetTempFileName()
         }
 
         process
@@ -187,7 +190,15 @@ Function Upload-Object
 
         end
         {
-            $objects | Export-Csv -Path $csvTempFileName
-            Upload-File -Local $csvTempFileName -URI $URI -RemoteFile "$(Get-RemoteFileName -FileName $OutputName).csv" -NoValidate
+            if ($OutputType -eq 'CSV')
+            {
+                $objects | Export-Csv -Path $tempFileName
+            }
+            elseif ($OutputType -eq 'XML')
+            {
+                $objects | ConvertTo-XML -Depth $Depth -As String | Out-File -FilePath $tempFileName
+            }
+
+            Upload-File -Local $tempFileName -URI $URI -RemoteFile "$(Get-RemoteFileName -FileName $OutputName).$($OutputType.ToLower())" -NoValidate
         }
 }
