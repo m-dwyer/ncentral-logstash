@@ -1,27 +1,34 @@
 ﻿[CmdletBinding()]
-param([string] $CsvDirectory, [string] $SqlServer, [string] $SqlDatabase, [string] $SqlUser, [string] $SqlPassword, [string] $LogstashServer, [int] $LogstashPort)
+param([string] $SourceDirectory, [string] $SqlServer, [string] $SqlDatabase, [string] $SqlUser, [string] $SqlPassword, [string] $LogstashServer, [int] $LogstashPort)
 
 Import-Module Logstash
+Import-Module XMLToObject
 
 $sqlConnectionStr = "Server=$SqlServer;Database=$SqlDatabase;User ID=$SqlUser;Password=$SqlPassword;"
 $sqlConnection = New-Object System.Data.SQLClient.SQLConnection
 $sqlConnection.ConnectionString = $sqlConnectionStr
 
-Write-Verbose "Checking $CsvDirectory for CSV files.."
-$csvItems = Get-ChildItem -Path $CsvDirectory -Filter "*.csv"
+Write-Verbose "Checking $SourceDirectory for files.."
 
-if ($csvItems -eq $null)
+$items = Get-ChildItem -Path $SourceDirectory -Recurse -Include @("*.csv", "*.xml")
+
+if ($items -eq $null)
 {
     exit
 }
 
+if ($items.GetType().Name -ne 'Object[]')
+{
+    $items = @($items)
+}
+
 $appliances = @{}
 
-$csvItems | % {
-    $csvItem = $_
+$items | % {
+    $item = $_
 
     $applianceId = -1
-    if ($csvItem -match '(\d+)_(.*(?=.csv))')
+    if ($item -match '(\d+)_(.*(?=.csv|.xml))')
     {
         $applianceId = $Matches[1]
     }
@@ -67,7 +74,7 @@ $result | % {
     $applianceAttributes.ApplianceName = $resultApplianceName
     $applianceAttributes.CustomerName = $resultCustomerName
 
-    $matchedFiles = $csvItems -match "($resultApplianceId)_(.*(?=.csv))" | Select -ExpandProperty FullName
+    $matchedFiles = $items -match "($resultApplianceId)_(.*(?=.csv|.xml))" | Select -ExpandProperty FullName
     $applianceAttributes.ApplianceFiles += $matchedFiles
 }
 
@@ -86,21 +93,44 @@ $appliances.GetEnumerator() | % {
         Write-Verbose "Processing $applianceFile"
         try
         {
-            Import-Csv -Path $applianceFile | % {
-                $esType = [regex]::Match($applianceFile, '(\d+)_(.*(?=.csv))').Groups[2].Value
-                $timestamp = (Get-Item $applianceFile).LastWriteTime.ToString("HH:mm:ss dd/MM/yyyy")
-                $applianceObjects += $_ | Add-Member -PassThru -NotePropertyMembers @{"CustomerName" = $applianceAttributes.CustomerName; "ApplianceName" = $applianceAttributes.ApplianceName; "estype" = $esType; "filetime" = $timestamp }
+            $esType = [regex]::Match($applianceFile, '(\d+)_(.*(?=.csv|.xml))').Groups[2].Value
+
+            $extension = [System.IO.Path]::GetExtension($applianceFile)
+            if ($extension -eq '.csv')
+            {
+                Import-Csv -Path $applianceFile | % {
+                    $esType = [regex]::Match($applianceFile, '(\d+)_(.*(?=.csv))').Groups[2].Value
+                    $timestamp = (Get-Item $applianceFile).LastWriteTime.ToString("HH:mm:ss dd/MM/yyyy")
+                    $applianceObjects += $_ | Add-Member -PassThru -NotePropertyMembers @{"CustomerName" = $applianceAttributes.CustomerName; "ApplianceName" = $applianceAttributes.ApplianceName; "estype" = $esType; "filetime" = $timestamp }
+                }
+            }
+            elseif ($extension -eq '.xml')
+            {
+                $fileXml = [xml](Get-Content $applianceFile)
+                $fileObjects = ConvertFrom-Xml($fileXml)
+                $fileObjects.Objects.GetEnumerator() | % {
+                    $applianceObjects += $_.Value
+                }
+
+                $applianceObjects | % {
+                    $_["CustomerName"] = $applianceAttributes.CustomerName
+                    $_["ApplianceName"] = $applianceAttributes.ApplianceName
+                    $_["estype"] = $esType
+                    $_["filetime"] = $timestamp
+                }
+
+                Write-Verbose "Done"
             }
 
             Write-Verbose "Pushing $($applianceObjects.Count) objects to Logstash.."
 
-            $applianceObjects | PushTo-Logstash -HostName $LogstashServer -Port $LogstashPort
+            $applianceObjects | PushTo-Logstash -Depth 10 -HostName $LogstashServer -Port $LogstashPort
             $totalPushCount += $applianceObjects.Count
-            Remove-Item -Path $applianceFile
+            #Remove-Item -Path $applianceFile
         }
         catch
         {
-            Write-Error "An error occurred parsing CSV to JSON and pushing to Logstash: $_.Exception.Message"
+            Write-Error "An error occurred parsing $applianceFile to JSON and pushing to Logstash: $_.Exception.Message"
         }
     }
 }
