@@ -17,8 +17,8 @@ Either HTTPS (WebDAV) or FTP (with SSL - no certificate check!) can be used in t
 
 On a centralised server, periodically call the CSVtoLogstash.ps1 script from Task Scheduler or elsewhere, passing in the directory you wish to monitor, Report Manager SQL Server credentials and Logstash Server/Port.
 
-The script expects CSV files of the format 1234567_MyOutput.csv, where 1234567 is the N-central ApplianceID, and MyOutput is an identifier for a script executed on the source agent (OutputName parameter of the Upload-Object cmdlet).  ApplianceIDs will be resolved to the Customer Name and Appliance Name.  The CSV will be converted to JSON and pushed to Logstash.  CustomerName, ApplianceName, estype and filetime fields are added.  estype is derived from the MyOutput string in each filename, and used for setting the type when indexing into ElasticSearch.  filetime is used as an alternate timestamp, taken from the CSV last write time.
+The script expects CSV or XML files of the format 1234567_MyOutput.(xml|csv), where 1234567 is the N-central ApplianceID, and MyOutput is an identifier for a script executed on the source agent (OutputName parameter of the Upload-Object cmdlet).  ApplianceIDs will be resolved to the Customer Name and Appliance Name.  The file will be converted to JSON and pushed to Logstash.  CustomerName, ApplianceName, estype and filetime fields are added.  estype is derived from the MyOutput string in each filename, and used for setting the type when indexing into ElasticSearch.  filetime is used as an alternate timestamp, taken from the file last write time.
 
 <b>TODO</b>
 
-Add XML serialization to allow retrieval of nested data / object graphs, such as with Export-Clixml and Import-Clixml.
+Currently, a separate module is utilised to import XML generated from ConvertTo-Xml, to overcome the limitations of PowerShell 2.0.  This may be extended to include ExportCli-Xml and ImportCli-Xml
