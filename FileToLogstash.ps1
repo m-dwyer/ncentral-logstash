@@ -135,9 +135,9 @@ $appliances.GetEnumerator() | % {
     }
 }
 
-if (-not [System.Diagnostics.EventLog]::SourceExists(“CSVtoLogstash"))
+if (-not [System.Diagnostics.EventLog]::SourceExists("FileToLogstash"))
 {
-    [System.Diagnostics.EventLog]::CreateEventSource(“CSVtoLogstash”, “Application”)
+    [System.Diagnostics.EventLog]::CreateEventSource("FileToLogstash", "Application")
 }
 
 if ($totalPushCount -gt 0)
@@ -146,3 +146,4 @@ if ($totalPushCount -gt 0)
 }
 
 Write-Verbose "Done!"
+
