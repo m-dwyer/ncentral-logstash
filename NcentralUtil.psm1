@@ -196,7 +196,7 @@ Function Upload-Object
             }
             elseif ($OutputType -eq 'XML')
             {
-                $objects | ConvertTo-XML -Depth $Depth -As String | Out-File -FilePath $tempFileName
+                $objects | Export-CliXML -Depth $Depth -Path $tempFileName
             }
 
             Upload-File -Local $tempFileName -URI $URI -RemoteFile "$(Get-RemoteFileName -FileName $OutputName).$($OutputType.ToLower())" -NoValidate
