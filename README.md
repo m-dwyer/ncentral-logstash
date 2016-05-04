@@ -19,6 +19,3 @@ On a centralised server, periodically call the FiletoLogstash.ps1 script from Ta
 
 The script expects CSV or XML files of the format 1234567_MyOutput.(xml|csv), where 1234567 is the N-central ApplianceID, and MyOutput is an identifier for a script executed on the source agent (OutputName parameter of the Upload-Object cmdlet).  ApplianceIDs will be resolved to the Customer Name and Appliance Name.  The file will be converted to JSON and pushed to Logstash.  CustomerName, ApplianceName, estype and filetime fields are added.  estype is derived from the MyOutput string in each filename, and used for setting the type when indexing into ElasticSearch.  filetime is used as an alternate timestamp, taken from the file last write time.
 
-<b>TODO</b>
-
-Currently, a separate module is utilised to import XML generated from ConvertTo-Xml, to overcome the limitations of PowerShell 2.0.  This may be extended to include ExportCli-Xml and ImportCli-Xml
