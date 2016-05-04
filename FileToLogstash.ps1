@@ -1,8 +1,31 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([string] $SourceDirectory, [string] $SqlServer, [string] $SqlDatabase, [string] $SqlUser, [string] $SqlPassword, [string] $LogstashServer, [int] $LogstashPort)
 
+function ConvertTo-JSONFriendlyPSObject
+{
+    param(
+    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+    [PSObject] $Object
+    )
+
+    $newProperties = @{}
+
+    foreach ($property in $Object.PSObject.Properties)
+    {
+        $propertyVal = $property.Value
+        if ($property.TypeNameOfValue -eq 'System.DateTime')
+        {
+            $propertyVal = $propertyVal.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss.fffffffK")
+            $property.Value = $propertyVal
+        }
+        elseif ($propertyVal -ne $null)
+        {
+            $propertyVal | ConvertTo-JSONFriendlyPSObject
+        }
+    }
+}
+
 Import-Module Logstash
-Import-Module XMLToObject
 
 $sqlConnectionStr = "Server=$SqlServer;Database=$SqlDatabase;User ID=$SqlUser;Password=$SqlPassword;"
 $sqlConnection = New-Object System.Data.SQLClient.SQLConnection
@@ -94,29 +117,31 @@ $appliances.GetEnumerator() | % {
         try
         {
             $esType = [regex]::Match($applianceFile, '(\d+)_(.*(?=.csv|.xml))').Groups[2].Value
+            $timestamp = (Get-Item $applianceFile).LastWriteTime.ToString("HH:mm:ss dd/MM/yyyy")
 
             $extension = [System.IO.Path]::GetExtension($applianceFile)
             if ($extension -eq '.csv')
             {
                 Import-Csv -Path $applianceFile | % {
                     $esType = [regex]::Match($applianceFile, '(\d+)_(.*(?=.csv))').Groups[2].Value
-                    $timestamp = (Get-Item $applianceFile).LastWriteTime.ToString("HH:mm:ss dd/MM/yyyy")
                     $applianceObjects += $_ | Add-Member -PassThru -NotePropertyMembers @{"CustomerName" = $applianceAttributes.CustomerName; "ApplianceName" = $applianceAttributes.ApplianceName; "estype" = $esType; "filetime" = $timestamp }
                 }
             }
             elseif ($extension -eq '.xml')
             {
-                $fileXml = [xml](Get-Content $applianceFile)
-                $fileObjects = ConvertFrom-Xml($fileXml)
-                $fileObjects.Objects.GetEnumerator() | % {
-                    $applianceObjects += $_.Value
-                }
+                $applianceObjects = Import-CliXml $applianceFile
 
                 $applianceObjects | % {
-                    $_["CustomerName"] = $applianceAttributes.CustomerName
-                    $_["ApplianceName"] = $applianceAttributes.ApplianceName
-                    $_["estype"] = $esType
-                    $_["filetime"] = $timestamp
+                    $applianceObject = $_
+
+                    $applianceObject | ConvertTo-JSONFriendlyPSObject
+
+                    $applianceObject | Add-Member -NotePropertyMembers @{
+                        "CustomerName" = $applianceAttributes.CustomerName;
+                        "ApplianceName" = $applianceAttributes.ApplianceName;
+                        "estype" = $esType;
+                        "filetime" = $timestamp
+                    }
                 }
 
                 Write-Verbose "Done"
@@ -126,7 +151,7 @@ $appliances.GetEnumerator() | % {
 
             $applianceObjects | PushTo-Logstash -Depth 10 -HostName $LogstashServer -Port $LogstashPort
             $totalPushCount += $applianceObjects.Count
-            #Remove-Item -Path $applianceFile
+            Remove-Item -Path $applianceFile
         }
         catch
         {
@@ -135,14 +160,14 @@ $appliances.GetEnumerator() | % {
     }
 }
 
-if (-not [System.Diagnostics.EventLog]::SourceExists("FileToLogstash"))
+if (-not [System.Diagnostics.EventLog]::SourceExists(“FiletoLogstash"))
 {
-    [System.Diagnostics.EventLog]::CreateEventSource("FileToLogstash", "Application")
+    [System.Diagnostics.EventLog]::CreateEventSource(“FiletoLogstash”, “Application”)
 }
 
 if ($totalPushCount -gt 0)
 {
-    Write-EventLog -LogName Application -Source "CSVtoLogstash" -EntryType Information -EventId 1000 -Message "Pushed $totalPushCount objects from CSV to Logstash"
+    Write-EventLog -LogName Application -Source "FiletoLogstash" -EntryType Information -EventId 1000 -Message "Pushed $totalPushCount objects from file to Logstash"
 }
 
 Write-Verbose "Done!"
