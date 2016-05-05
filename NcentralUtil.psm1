@@ -166,6 +166,7 @@ Function Upload-Object
         Position=0,
         ValueFromPipeline=$true)
     ]
+    [ValidateNotNullOrEmpty()]
     [PSObject[]]$InputObject,
     [string] $OutputName,
     [ValidateSet("CSV", "XML")]
